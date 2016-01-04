@@ -1,7 +1,6 @@
 import threading
 
 from SimpleXMLRPCServer import SimpleXMLRPCServer
-from SimpleXMLRPCServer import SimpleXMLRPCRequestHandler
 
 import conf_master
 import master
