@@ -6,7 +6,7 @@ from SimpleXMLRPCServer import SimpleXMLRPCServer
 import conf_master
 import master
 from master import Task, TaskLoader
-from common import NodeInfo, RequestHandler
+from common import NodeInfo, RequestHandler, doesServiceExist
 
 class ThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer): pass
 
@@ -71,6 +71,9 @@ class RPCServerThread(threading.Thread):
 
 
 def main():
+    if doesServiceExist(conf_master.MASTER_IP, conf_master.MASTER_PORT):
+        print("%s:%s already been used! change another port" % (conf_master.MASTER_IP, conf_master.MASTER_PORT))
+        exit(1)
     master_node = master.Master(TaskLoader(), conf_master)
     server = RPCServerThread(master_node)
     server.start()

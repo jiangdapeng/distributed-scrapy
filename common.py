@@ -1,7 +1,6 @@
 #coding=utf8
 import xmlrpclib, httplib
 
-from SimpleXMLRPCServer import SimpleXMLRPCServer
 from SimpleXMLRPCServer import SimpleXMLRPCRequestHandler
 
 import time
@@ -26,6 +25,7 @@ class NodeInfo(object):
             self.heartbeat = get_timestamp()
 
     def get_identifier(self):
+        '''返回能唯一确定该节点的标识'''
         return '%s_%s_%s' % (self.name, self.ip, self.port)
 
     def get_heartbeat(self):
