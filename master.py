@@ -51,7 +51,7 @@ class Master(object):
         self.lock = threading.Lock()
         self.idle_workers_queue = Queue.Queue()
         self.workers = {}
-
+        self.idle_workers = {}
         self.tasks_queue = Queue.Queue()
         self.running_tasks = {}
         self.task_loader = task_loader
@@ -85,10 +85,15 @@ class Master(object):
 
 
     def register_worker(self, worker):
+        '''注册作业节点'''
         identifier = worker.get_identifier()
         self.lock.acquire()
         self.workers[identifier] = worker
-        self.idle_workers_queue.put(worker);
+
+        # 如果节点不在空闲队列中，则将其加入
+        if identifier not in self.idle_workers:
+            self.idle_workers[identifier] = worker
+            self.idle_workers_queue.put(worker)
         self.lock.release()
         status = "OK"
         return status
@@ -111,8 +116,12 @@ class Master(object):
         self.lock.acquire()
         if task_id in self.running_tasks:
             self.running_tasks.pop(task_id)
+
         self.workers[worker_id] = worker
-        self.idle_workers_queue.put(worker)
+
+        if worker_id not in self.idle_workers:
+            self.idle_workers[worker_id] = worker
+            self.idle_workers_queue.put(worker)
         self.lock.release()
 
         return True
@@ -140,15 +149,18 @@ class Master(object):
         task = self.tasks_queue.get()
         worker = self.idle_workers_queue.get()
         worker_id = worker.get_identifier()
+
+        self.lock.acquire()
+        self.idle_workers.pop(worker_id,None)
+        self.lock.release()
+
         try:
             proxy = common.RPCServerProxy.get_proxy(worker)
             r = proxy.assign_task(task)
             if r == True:
                 # 分发任务成功
                 self.lock.acquire()
-
                 self.running_tasks[task.identifier] = task
-
                 self.lock.release()
             else:
                 # 分发失败，重新放入作业队列

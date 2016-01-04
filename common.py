@@ -52,3 +52,21 @@ class RPCServerProxy(object):
     @classmethod
     def build_uri(self, node_info):
         return 'http://%s:%s' % (node_info.ip, node_info.port)
+
+import socket
+
+def doesServiceExist(host, port):
+    '''
+    检测端口是否已经被使用
+    :param host:
+    :param port:
+    :return:
+    '''
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(1)
+        s.connect((host, port))
+        s.close()
+        return True
+    except:
+        return False

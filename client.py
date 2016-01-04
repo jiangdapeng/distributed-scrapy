@@ -101,6 +101,10 @@ def main():
 
     if args.port:
         node_info.port=args.port
+
+    if common.doesServiceExist(node_info.ip, node_info.port):
+        print("%s:%s already been used! change another port" % (node_info.ip, node_info.port))
+        exit(1)
     
     worker_node = WorkerNode(master_info, node_info)
     
