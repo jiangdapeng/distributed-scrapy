@@ -1,4 +1,5 @@
 import threading
+from SocketServer import ThreadingMixIn
 
 from SimpleXMLRPCServer import SimpleXMLRPCServer
 
@@ -7,13 +8,14 @@ import master
 from master import Task, TaskLoader
 from common import NodeInfo, RequestHandler
 
+class ThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer): pass
 
 class RPCServerThread(threading.Thread):
 
 	def __init__(self, master):
 		threading.Thread.__init__(self)
 		# Create server
-		server = SimpleXMLRPCServer((conf_master.MASTER_IP, conf_master.MASTER_PORT), requestHandler=RequestHandler, logRequests=True)
+		server = ThreadedXMLRPCServer((conf_master.MASTER_IP, conf_master.MASTER_PORT), requestHandler=RequestHandler, logRequests=True)
 		server.register_introspection_functions()
 		server.register_function(self.register_worker)
 		server.register_function(self.logout_worker)
