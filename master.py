@@ -2,8 +2,9 @@
 import Queue
 import xmlrpclib
 import threading
-
 import common
+
+import traceback
 
 class Task(object):
 
@@ -19,7 +20,7 @@ class TaskLoader(object):
 		pass
 
 	def get_tasks(self):
-		tasks = [Task(i, 'test','test_spider',[]) for i in range(10)]
+		tasks = [Task(i, 'test','test_spider',['http://'+str(i)]) for i in range(100)]
 		return tasks
 
 
@@ -35,17 +36,20 @@ class Master(object):
 		self.task_loader = task_loader
 		self.load_tasks()
 
+	def get_status(self):
+		return {
+			'total_workers': self.workers,
+			'tasks': self.tasks.qsize(),
+			'idle_workers': self.idle_workers.qsize()
+		}
+
 	def register_worker(self, worker):
 		identifier = worker.get_identifier()
 		self.lock.acquire()
-		if identifier in self.workers:
-			status =  "EXISTS"
-		else:
-			self.workers[identifier] = worker
-			
-			self.idle_workers.put(worker);
-			status = "OK"
+		self.workers[identifier] = worker
+		self.idle_workers.put(worker);
 		self.lock.release()
+		status = "OK"
 		return status
 		
 	def remove_worker(self, worker):
@@ -61,7 +65,7 @@ class Master(object):
 		self.lock.release()
 		return status
 
-	def task_done(self, worker, task, stats):
+	def task_complete(self, worker, task, stats):
 		task_id = task.identifier
 		worker_id = worker.get_identifier
 
@@ -72,6 +76,7 @@ class Master(object):
 			self.working_workers.pop(worker_id)
 		self.idle_workers.put(worker)
 		self.lock.release()
+		return True
 
 	def lookup_spider(self, spider):
 		pass
@@ -83,25 +88,34 @@ class Master(object):
 				self.tasks.put(task)
 
 	def schedule_next(self):
+		print('qsize:',self.tasks.qsize())
 		task = self.tasks.get()
 		worker = self.idle_workers.get()
 		worker_id = worker.get_identifier()
-		proxy = common.RPCServerProxy.get_proxy(worker)
-		r = proxy.assign_task(task)
-		if r == True:
-			# 分发任务成功
-			self.lock.acquire()
+		try:
+			proxy = common.RPCServerProxy.get_proxy(worker)
+			r = proxy.assign_task(task)
+			if r == True:
+				# 分发任务成功
+				self.lock.acquire()
 
-			self.running_tasks[task.identifier] = task
-			self.working_workers[worker_id] = worker
+				self.running_tasks[task.identifier] = task
+				self.working_workers[worker_id] = worker
 
-			self.lock.release()
-		else:
-			# 分发失败，重新放入作业队列
-			self.tasks.put(task)		
+				self.lock.release()
+			else:
+				# 分发失败，重新放入作业队列
+				self.tasks.put(task)
+		except Exception,e:
+			traceback.print_exc()
+			self.tasks.put(task)
+			self.workers.pop(worker_id, None)
 
 	def serve_forever(self):
 		while True:
-			self.schedule_next()
+			try:
+				self.schedule_next()
+			except Exception,e:
+				traceback.print_exc()
 
 	

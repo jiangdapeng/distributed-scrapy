@@ -3,23 +3,32 @@ import xmlrpclib, httplib
 from SimpleXMLRPCServer import SimpleXMLRPCServer
 from SimpleXMLRPCServer import SimpleXMLRPCRequestHandler
 
+import time
+
+def get_timestamp():
+	return int(time.time())
+
 # Restrict to a particular path.
 class RequestHandler(SimpleXMLRPCRequestHandler):
     rpc_paths = ('/RPC2',)
 
 class NodeInfo(object):
 
-	def __init__(self, name, ip, port, status):
+	def __init__(self, name, ip, port, status, **kw):
 		self.name = name
 		self.ip = ip
 		self.port = port
 		self.status = status
+		if 'heartbeat' in kw:
+			self.heartbeat = kw.get('heartbeat')
+		else:
+			self.heartbeat = get_timestamp()
 
 	def get_identifier(self):
 		return '%s_%s_%s' % (self.name, self.ip, self.port)
 
 	def __str__(self):
-		return get_identifier()
+		return self.get_identifier()
 
 class TimeoutTransport(xmlrpclib.Transport):
     timeout = 10.0
