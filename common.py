@@ -1,3 +1,4 @@
+#coding=utf8
 import xmlrpclib, httplib
 
 from SimpleXMLRPCServer import SimpleXMLRPCServer
@@ -26,6 +27,10 @@ class NodeInfo(object):
 
 	def get_identifier(self):
 		return '%s_%s_%s' % (self.name, self.ip, self.port)
+
+	def get_heartbeat(self):
+		'''返回最近一次心跳的时间'''
+		return self.heartbeat
 
 	def __str__(self):
 		return self.get_identifier()

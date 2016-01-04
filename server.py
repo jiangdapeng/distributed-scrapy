@@ -3,6 +3,7 @@ import threading
 from SimpleXMLRPCServer import SimpleXMLRPCServer
 from SimpleXMLRPCServer import SimpleXMLRPCRequestHandler
 
+import conf_master
 import master
 from master import Task, TaskLoader
 from common import NodeInfo, RequestHandler
@@ -13,12 +14,13 @@ class RPCServerThread(threading.Thread):
 	def __init__(self, master):
 		threading.Thread.__init__(self)
 		# Create server
-		server = SimpleXMLRPCServer(("localhost", 8000), requestHandler=RequestHandler, logRequests=True)
+		server = SimpleXMLRPCServer((conf_master.MASTER_IP, conf_master.MASTER_PORT), requestHandler=RequestHandler, logRequests=True)
 		server.register_introspection_functions()
 		server.register_function(self.register_worker)
 		server.register_function(self.logout_worker)
 		server.register_function(self.task_complete)
 		server.register_function(self.get_master_status)
+		server.register_function(self.heartbeat)
 
 		self.server = server
 		self.master = master
@@ -54,12 +56,21 @@ class RPCServerThread(threading.Thread):
 	def get_master_status(self):
 		return self.master.get_status()
 
+	def heartbeat(self, worker):
+		nodeInfo = NodeInfo(
+			name = worker['name'],
+			ip = worker['ip'],
+			port = worker['port'],
+			status =worker['status']
+			)
+		return self.master.heartbeat(nodeInfo)
+
 	def run(self):
 		self.server.serve_forever()
 
 
 def main():
-	master_node = master.Master(TaskLoader())
+	master_node = master.Master(TaskLoader(), conf_master)
 	server = RPCServerThread(master_node)
 	server.start()
 	master_node.serve_forever()
