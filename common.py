@@ -7,7 +7,7 @@ from SimpleXMLRPCServer import SimpleXMLRPCRequestHandler
 import time
 
 def get_timestamp():
-	return int(time.time())
+    return int(time.time())
 
 # Restrict to a particular path.
 class RequestHandler(SimpleXMLRPCRequestHandler):
@@ -15,25 +15,25 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
 
 class NodeInfo(object):
 
-	def __init__(self, name, ip, port, status, **kw):
-		self.name = name
-		self.ip = ip
-		self.port = port
-		self.status = status
-		if 'heartbeat' in kw:
-			self.heartbeat = kw.get('heartbeat')
-		else:
-			self.heartbeat = get_timestamp()
+    def __init__(self, name, ip, port, status, **kw):
+        self.name = name
+        self.ip = ip
+        self.port = port
+        self.status = status
+        if 'heartbeat' in kw:
+            self.heartbeat = kw.get('heartbeat')
+        else:
+            self.heartbeat = get_timestamp()
 
-	def get_identifier(self):
-		return '%s_%s_%s' % (self.name, self.ip, self.port)
+    def get_identifier(self):
+        return '%s_%s_%s' % (self.name, self.ip, self.port)
 
-	def get_heartbeat(self):
-		'''返回最近一次心跳的时间'''
-		return self.heartbeat
+    def get_heartbeat(self):
+        '''返回最近一次心跳的时间'''
+        return self.heartbeat
 
-	def __str__(self):
-		return self.get_identifier()
+    def __str__(self):
+        return self.get_identifier()
 
 class TimeoutTransport(xmlrpclib.Transport):
     timeout = 10.0
@@ -45,10 +45,10 @@ class TimeoutTransport(xmlrpclib.Transport):
 
 class RPCServerProxy(object):
 
-	@classmethod
-	def get_proxy(cls, node_info):
-		return xmlrpclib.ServerProxy(cls.build_uri(node_info))
+    @classmethod
+    def get_proxy(cls, node_info):
+        return xmlrpclib.ServerProxy(cls.build_uri(node_info))
 
-	@classmethod
-	def build_uri(self, node_info):
-		return 'http://%s:%s' % (node_info.ip, node_info.port)
+    @classmethod
+    def build_uri(self, node_info):
+        return 'http://%s:%s' % (node_info.ip, node_info.port)
