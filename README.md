@@ -1,5 +1,26 @@
 # distributed-scrapy
 
+### 使用方式
+
+#### 配置
+- conf_master: IP\PORT，master使用的主机、端口 
+
+- conf_client: IP\PORT，worker默认使用端口，如果在一台机器上启动多个client，则需要在命令行参数上分别指定端口
+
+#### master机器
+
+`python server.py`
+
+#### worker机器
+`python client.py`
+
+或者
+
+`pythoon client.py -p xxx`
+
+master 和 worker可以在同一个主机上
+
+
 ### 采用Master-slave模式的简易分布式系统
 
 开发目的：作为分布式爬虫系统的一个原型
