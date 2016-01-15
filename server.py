@@ -27,30 +27,17 @@ class RPCServerThread(threading.Thread):
         self.master = master
 
     def register_worker(self, worker):
-        nodeInfo = NodeInfo(
-            name = worker['name'],
-            ip = worker['ip'],
-            port = worker['port'],
-            status =worker['status']
-            )
+        print(worker)
+        nodeInfo = NodeInfo.from_dict(worker)
+        print(nodeInfo)
         return self.master.register_worker(nodeInfo)
 
     def logout_worker(self, worker):
-        nodeInfo = NodeInfo(
-            name = worker['name'],
-            ip = worker['ip'],
-            port = worker['port'],
-            status =worker['status']
-            )
+        nodeInfo = NodeInfo.from_dict(worker)
         return self.master.remove_worker(nodeInfo)
 
     def task_complete(self, worker, task, stats):
-        nodeInfo = NodeInfo(
-            name = worker['name'],
-            ip = worker['ip'],
-            port = worker['port'],
-            status =worker['status']
-            )
+        nodeInfo = NodeInfo.from_dict(worker)
         taskObj = Task(task['identifier'], task['project'], task['spider_name'], task['urls'])
         return self.master.task_complete(nodeInfo, taskObj, stats)
 
@@ -58,12 +45,7 @@ class RPCServerThread(threading.Thread):
         return self.master.get_status()
 
     def heartbeat(self, worker):
-        nodeInfo = NodeInfo(
-            name = worker['name'],
-            ip = worker['ip'],
-            port = worker['port'],
-            status =worker['status']
-            )
+        nodeInfo = NodeInfo.from_dict(worker)
         return self.master.heartbeat(nodeInfo)
 
     def run(self):

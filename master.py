@@ -1,12 +1,12 @@
 #coding=utf8
 import Queue
-import xmlrpclib
 import threading
 import traceback
 import time
 
 import common
 import conf_master
+from worker_manager import WorkerManager
 
 class Task(object):
 
@@ -40,7 +40,7 @@ class CheckWorkersThread(threading.Thread):
         while True:
             try:
                 time.sleep(conf_master.DIE_THRESHOLD)
-                self.master.clean_die_worker()
+                self.master.clean_death_workers()
             except Exception,e:
                 traceback.print_exc()
 
@@ -49,9 +49,7 @@ class Master(object):
 
     def __init__(self, task_loader, conf):
         self.lock = threading.Lock()
-        self.idle_workers_queue = Queue.Queue()
-        self.workers = {}
-        self.idle_workers = {}
+        self.workerManager = WorkerManager(conf)
         self.tasks_queue = Queue.Queue()
         self.running_tasks = {}
         self.task_loader = task_loader
@@ -60,79 +58,57 @@ class Master(object):
 
     def get_status(self):
         return {
-            'total_workers': self.workers,
+            'total_workers': self.workerManager.get_workers(),
             'tasks': self.tasks_queue.qsize(),
-            'idle_workers': self.idle_workers_queue.qsize()
+            'idle_workers': {}
         }
 
-    def is_die(self, worker):
-        timestamp = common.get_timestamp()
-        return timestamp - worker.get_heartbeat() > self.conf.DIE_THRESHOLD
 
-    def clean_die_worker(self):
+    def clean_death_workers(self):
         '''定期检查worker的心跳信息，及时清除死亡worker'''
-
-        self.lock.acquire()
-
-        died_workers = set()
-        for worker_id,worker in self.workers.items():
-            if self.is_die(worker):
-                died_workers.add(worker_id)
-        for worker_id in died_workers:
-            self.workers.pop(worker_id, None)
-
-        self.lock.release()
+        return self.workerManager.clean_death_workers()
 
 
     def register_worker(self, worker):
         '''注册作业节点'''
-        identifier = worker.get_identifier()
-        self.lock.acquire()
-        self.workers[identifier] = worker
-
-        # 如果节点不在空闲队列中，则将其加入
-        if identifier not in self.idle_workers:
-            self.idle_workers[identifier] = worker
-            self.idle_workers_queue.put(worker)
-        self.lock.release()
+        print('in master:',worker)
         status = "OK"
+        if worker is not None:
+            self.workerManager.add_worker(worker)
+        else:
+            status = "Invalid"
+        print(status)
+        print(self.workerManager.get_workers())
         return status
         
     def remove_worker(self, worker):
-        identifier = worker.get_identifier()
         status = "OK"
-        self.lock.acquire()
-        if identifier in self.workers:
-            self.workers.pop(identifier)
-        else:
+        if worker is None:
+            status = "Invalid"
+            return status
+        identifier = worker.get_identifier()
+        w = self.workerManager.remove_worker(identifier)
+        if w is None:
             status = "NOT EXISTS"
-        self.lock.release()
         return status
 
     def task_complete(self, worker, task, stats):
+        '''worker完成一个作业，返回作业统计信息，worker重新归于队列'''
         task_id = task.get_identifier()
-        worker_id = worker.get_identifier()
+
+        worker.status = common.NodeStatus.idle
+        self.workerManager.update_worker(worker)
 
         self.lock.acquire()
         if task_id in self.running_tasks:
             self.running_tasks.pop(task_id)
-
-        self.workers[worker_id] = worker
-
-        if worker_id not in self.idle_workers:
-            self.idle_workers[worker_id] = worker
-            self.idle_workers_queue.put(worker)
         self.lock.release()
 
         return True
 
-    def heartbeat(self, worker_info):
+    def heartbeat(self, worker):
         '''收到心跳信息，更新该工作节点的信息'''
-        self.lock.acquire()
-
-        self.workers[worker_info.get_identifier()] = worker_info
-
-        self.lock.release()
+        self.workerManager.update_worker(worker)
         return True
 
     def lookup_spider(self, spider):
@@ -147,12 +123,9 @@ class Master(object):
     def schedule_next(self):
         print('qsize:',self.tasks_queue.qsize())
         task = self.tasks_queue.get()
-        worker = self.idle_workers_queue.get()
+        worker = self.workerManager.next_worker()
         worker_id = worker.get_identifier()
-
-        self.lock.acquire()
-        self.idle_workers.pop(worker_id,None)
-        self.lock.release()
+        print(task.get_identifier(), str(worker))
 
         try:
             proxy = common.RPCServerProxy.get_proxy(worker)
@@ -168,7 +141,7 @@ class Master(object):
         except Exception,e:
             traceback.print_exc()
             self.tasks_queue.put(task)
-            self.workers.pop(worker_id, None)
+            self.workerManager.remove_worker(worker_id)
 
     def serve_forever(self):
         check_thread = CheckWorkersThread(self)

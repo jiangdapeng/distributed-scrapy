@@ -5,6 +5,8 @@ from SimpleXMLRPCServer import SimpleXMLRPCRequestHandler
 
 import time
 
+__all__ = ['get_timestamp','RequestHandler','NodeStatus', 'NodeInfo', 'RPCServerProxy', 'doesServiceExist']
+
 def get_timestamp():
     return int(time.time())
 
@@ -12,7 +14,14 @@ def get_timestamp():
 class RequestHandler(SimpleXMLRPCRequestHandler):
     rpc_paths = ('/RPC2',)
 
+class NodeStatus(object):
+    idle = 1    # 空闲
+    working = 2 # 工作中
+    down = 3    # 无响应
+
 class NodeInfo(object):
+
+    required_fields = ['name', 'ip', 'port', 'status']
 
     def __init__(self, name, ip, port, status, **kw):
         self.name = name
@@ -28,12 +37,28 @@ class NodeInfo(object):
         '''返回能唯一确定该节点的标识'''
         return '%s_%s_%s' % (self.name, self.ip, self.port)
 
+    def update_heartbeat(self):
+        self.heartbeat = get_timestamp()
+
     def get_heartbeat(self):
         '''返回最近一次心跳的时间'''
         return self.heartbeat
 
+
     def __str__(self):
         return self.get_identifier()
+
+    @classmethod
+    def from_dict(cls, infoDict):
+        ok = True
+        for f in cls.required_fields:
+            if f not in infoDict:
+                ok = False
+                break
+        if not ok:
+            return None
+        node = cls(**infoDict )
+        return node
 
 class TimeoutTransport(xmlrpclib.Transport):
     timeout = 10.0

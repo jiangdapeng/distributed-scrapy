@@ -8,7 +8,7 @@ import time
 import traceback
 
 import common
-from common import NodeInfo, RequestHandler
+from common import NodeInfo, RequestHandler, NodeStatus
 import conf_master
 import conf_client
 
@@ -28,7 +28,8 @@ class HeartbeatThread(threading.Thread):
         while True:
             try:
                 time.sleep(self.heartbeat_duration)
-                self.proxy.heartbeat(self.worker_node.get_node_info())
+                worker = self.worker_node.get_node_info()
+                self.proxy.heartbeat(worker)
             except Exception,e:
                 traceback.print_exc()
 
@@ -39,8 +40,14 @@ class WorkerNode(object):
         self.tasks = Queue.Queue()
         self.node_info = node_info
         self.master_info = master_info
+        self.working = False
 
     def get_node_info(self):
+        if self.is_idle():
+            self.node_info.status = NodeStatus.idle
+        else:
+            self.node_info.status = NodeStatus.working
+        self.node_info.update_heartbeat()
         return self.node_info
 
     def get_master_info(self):
@@ -55,16 +62,23 @@ class WorkerNode(object):
         '''增加作业'''
         self.tasks.put(task)
 
+    def is_idle(self):
+        return self.tasks.qsize()==0 and not self.working
+
     def do_task(self):
         '''执行作业'''
         task = self.tasks.get()
+        self.working = True
         # do task here
         print(task)
         time.sleep(3)
         # 告诉master作业完成
+        self.working = False
+        self.node_info.update_heartbeat()
         self.proxy.task_complete(self.node_info, task, {})
 
     def run(self):
+        self.register()
         while True:
             try:
                 self.do_task()
@@ -91,24 +105,29 @@ class RPCWorkerThread(threading.Thread):
     def run(self):
         self.server.serve_forever()
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-p","--port", help=u"作业节点rpc服务端口", type=int)
-    args = parser.parse_args()
-
-    master_info = NodeInfo(name="master",ip=conf_master.MASTER_IP,port=conf_master.MASTER_PORT, status='ready')
-    node_info = NodeInfo(name="worker", ip=conf_client.WORKER_IP, port=conf_client.WORKER_PORT, status='ready')
-
-    if args.port:
-        node_info.port=args.port
+def get_worker(ip, port):
+    master_info = NodeInfo(name="master",ip=conf_master.MASTER_IP,port=conf_master.MASTER_PORT, status=NodeStatus.working)
+    node_info = NodeInfo(name="worker", ip=ip, port=port, status=NodeStatus.idle)
 
     if common.doesServiceExist(node_info.ip, node_info.port):
         print("%s:%s already been used! change another port" % (node_info.ip, node_info.port))
         exit(1)
-    
+
     worker_node = WorkerNode(master_info, node_info)
-    
     print(worker_node.get_node_info())
+
+    return worker_node
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-p","--port", help=u"作业节点rpc服务端口", type=int)
+    args = parser.parse_args()
+    ip = conf_client.WORKER_IP
+    port = conf_client.WORKER_PORT
+    if args.port is not None:
+        port = args.port
+
+    worker_node = get_worker(ip, port)
 
     prc = RPCWorkerThread(worker_node)
     heartbeat_thread = HeartbeatThread(worker_node)
@@ -116,7 +135,6 @@ def main():
     prc.start()
     heartbeat_thread.start()
 
-    worker_node.register()
     worker_node.run()
 
 if __name__ == '__main__':
