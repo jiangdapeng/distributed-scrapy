@@ -7,6 +7,8 @@ import time
 import common
 import conf_master
 from worker_manager import WorkerManager
+from task_manager import TaskManager
+from log import logging
 
 
 class CheckWorkersThread(threading.Thread):
@@ -30,35 +32,36 @@ class Master(object):
     def __init__(self, task_loader, conf):
         self.lock = threading.Lock()
         self.workerManager = WorkerManager(conf)
-        self.tasks_queue = Queue.Queue()
+        self.taskManager = TaskManager(task_loader)
         self.running_tasks = {}
-        self.task_loader = task_loader
         self.conf = conf
         self.load_tasks()
 
     def get_status(self):
         return {
             'total_workers': self.workerManager.get_workers(),
-            'tasks': self.tasks_queue.qsize(),
+            'tasks': self.taskManager.get_task_count(),
             'idle_workers': self.workerManager.get_idle_workers()
         }
 
 
     def clean_death_workers(self):
         '''定期检查worker的心跳信息，及时清除死亡worker'''
-        return self.workerManager.clean_death_workers()
-
+        workers,tasks = self.workerManager.clean_death_workers()
+        logging.info("death workers:%s; relatedTasks:%s", workers, tasks)
+        for task in tasks:
+            self.taskManager.fail_task(task)
+        return workers
 
     def register_worker(self, worker):
         '''注册作业节点'''
-        print('in master:',worker)
+        logging.info("%s come in", worker)
         status = "OK"
         if worker is not None:
             self.workerManager.add_worker(worker)
         else:
             status = "Invalid"
-        print(status)
-        print(self.workerManager.get_workers())
+        # logging.info(self.workerManager.get_workers())
         return status
         
     def remove_worker(self, worker):
@@ -67,23 +70,18 @@ class Master(object):
             status = "Invalid"
             return status
         identifier = worker.get_identifier()
-        w = self.workerManager.remove_worker(identifier)
+        w, tasks = self.workerManager.remove_worker(identifier)
+        for task in tasks:
+            self.taskManager.fail_task(task)
         if w is None:
             status = "NOT EXISTS"
         return status
 
     def task_complete(self, worker, task, stats):
         '''worker完成一个作业，返回作业统计信息，worker重新归于队列'''
-        task_id = task.get_identifier()
-
-        worker.status = common.NodeStatus.idle
+        self.workerManager.finish_task(worker, task)
         self.workerManager.update_worker(worker)
-
-        self.lock.acquire()
-        if task_id in self.running_tasks:
-            self.running_tasks.pop(task_id)
-        self.lock.release()
-
+        self.taskManager.finish_task(task)
         return True
 
     def heartbeat(self, worker):
@@ -95,33 +93,19 @@ class Master(object):
         pass
 
     def load_tasks(self):
-        if self.task_loader is not None:
-            tasks = self.task_loader.get_tasks()
-            for task in tasks:
-                self.tasks_queue.put(task)
+        self.taskManager.load_tasks()
 
     def schedule_next(self):
-        print('qsize:',self.tasks_queue.qsize())
-        task = self.tasks_queue.get()
+        logging.info('qsize: %s',self.taskManager.get_task_count())
+        task = self.taskManager.next_task()
         worker = self.workerManager.next_worker()
-        worker_id = worker.get_identifier()
-        print(task.get_identifier(), str(worker))
-
+        self.workerManager.assign_task(worker, task)
         try:
             proxy = common.RPCServerProxy.get_proxy(worker)
-            r = proxy.assign_task(task)
-            if r == True:
-                # 分发任务成功
-                self.lock.acquire()
-                self.running_tasks[task.identifier] = task
-                self.lock.release()
-            else:
-                # 分发失败，重新放入作业队列
-                self.tasks_queue.put(task)
+            proxy.assign_task(task)
         except Exception,e:
             traceback.print_exc()
-            self.tasks_queue.put(task)
-            self.workerManager.remove_worker(worker_id)
+            self.remove_worker(worker)
 
     def serve_forever(self):
         check_thread = CheckWorkersThread(self)

@@ -1,5 +1,4 @@
 #coding=utf8
-import xmlrpclib
 import threading
 import Queue
 import argparse
@@ -33,10 +32,11 @@ class HeartbeatThread(threading.Thread):
                 worker = self.worker_node.get_node_info()
                 self.proxy.heartbeat(worker)
             except Exception,e:
-                traceback.print_exc()
+                logging.warning(e.message)
+                logging.warning(u"心跳失败")
 
 class WorkerNode(object):
-    '''作业节点，启动后先在master上注册，然后等待分配任务'''
+    '''作业节点，启动RPC线程后，先在master上注册，然后等待分配任务'''
     def __init__(self, master_info, node_info):
         self.proxy = common.RPCServerProxy.get_proxy(master_info)
         self.tasks = Queue.Queue()
@@ -57,8 +57,13 @@ class WorkerNode(object):
 
     def register(self):
         '''告诉master'''
-        rt = self.proxy.register_worker(self.node_info)
-        print('register status',rt)
+        try:
+            rt = self.proxy.register_worker(self.node_info)
+        except Exception,e:
+            logging.warning(e)
+            logging.warning('''Server is not available!\nPlease check:\n1. Server is running.\n2. Network is ok''')
+            exit(1)
+        logging.info('register status: %s',rt)
 
     def assign_task(self, task):
         '''增加作业'''
@@ -67,34 +72,40 @@ class WorkerNode(object):
     def is_idle(self):
         return self.tasks.qsize()==0 and not self.working
 
+    def finish_task(self, task, result):
+        self.working = False
+        if self.is_idle():
+            self.node_info.status = NodeStatus.idle
+        else:
+            self.node_info.status = NodeStatus.working
+
+        self.node_info.update_heartbeat()
+        try:
+            self.proxy.task_complete(self.node_info, task, result)
+        except Exception,e:
+            logging.warning(e)
+
     def do_task(self):
         '''执行作业'''
         task = self.tasks.get()
         self.working = True
         # do task here
-        print(task)
+        logging.info(task)
         time.sleep(3)
         # 告诉master作业完成
-        self.working = False
-        self.node_info.update_heartbeat()
-        self.proxy.task_complete(self.node_info, task, {})
+        self.finish_task(task, {})
 
     def run(self):
 
-        prc = RPCWorkerThread(self)
-        prc.setDaemon(True)
+        rpc = RPCWorkerThread(self)
+        rpc.setDaemon(True)
 
         heartbeat_thread = HeartbeatThread(self)
         heartbeat_thread.setDaemon(True)
 
-        prc.start()
+        rpc.start()
 
-        try:
-            self.register()
-        except Exception,e:
-            # traceback.print_exc()
-            logging.warning('''Server is not available!\nPlease check: \n1. Server is running.\n 2. Network is ok''')
-            exit(1)
+        self.register()
 
         heartbeat_thread.start()
 
@@ -103,6 +114,7 @@ class WorkerNode(object):
                 self.do_task()
             except Exception,e:
                 traceback.print_exc()
+                logging.warning('task failed!')
 
 class RPCWorkerThread(threading.Thread):
     '''负责提供给master调用的rpc接口的专用线程'''
@@ -129,11 +141,11 @@ def get_worker(ip, port):
     node_info = NodeInfo(name="worker", ip=ip, port=port, status=NodeStatus.idle)
 
     if common.doesServiceExist(node_info.ip, node_info.port):
-        print("%s:%s already been used! change another port" % (node_info.ip, node_info.port))
+        logging.warning("%s:%s already been used! change another port" % (node_info.ip, node_info.port))
         exit(1)
 
     worker_node = WorkerNode(master_info, node_info)
-    print(worker_node.get_node_info())
+    logging.info("%s startup" % worker_node.get_node_info())
 
     return worker_node
 

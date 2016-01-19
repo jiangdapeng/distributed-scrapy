@@ -6,6 +6,7 @@ import threading
 
 import common
 from common import NodeStatus
+from log import logging
 
 __all__ = ['WorkerManager']
 
@@ -16,6 +17,7 @@ class WorkerManager(object):
         self.idleWorkersQueue = Queue.Queue()
         self.workers = {} # 所有登记过的worker
         self.workersInQueue = {} # 记录所有在队列中的worker
+        self.workerTask = {}
         self.lock = threading.Lock()
 
     def next_worker(self):
@@ -59,6 +61,21 @@ class WorkerManager(object):
         '''查询worker信息'''
         return self.workers.get(worker_id, None)
 
+    def assign_task(self, worker, task):
+        """task分配给worker"""
+        logging.info("%s -> %s",task.get_identifier(), str(worker))
+        ok = False
+        self.lock.acquire()
+        if worker.get_identifier() not in self.workerTask:
+            self.workerTask[worker.get_identifier()] = task
+            ok = True
+        self.lock.release()
+        return ok
+
+    def finish_task(self, worker, task):
+        self.lock.acquire()
+        self.workerTask.pop(worker.get_identifier(), None)
+        self.lock.release()
 
     def get_workers(self):
         return self.workers.copy()
@@ -71,17 +88,20 @@ class WorkerManager(object):
         return timestamp - worker.get_heartbeat() > self.conf.DIE_THRESHOLD
 
     def clean_death_workers(self):
-        '''定期检查worker的心跳信息，及时清除死亡worker'''
+        '''定期检查worker的心跳信息，及时清除死亡worker，并返回死亡worker未完成作业'''
         self.lock.acquire()
 
         died_workers = set()
+        unfinishedTask = set()
         for worker_id,worker in self.workers.items():
             if self._is_die(worker):
                 died_workers.add(worker_id)
         for worker_id in died_workers:
             self.workers.pop(worker_id, None)
             self.workersInQueue.pop(worker_id, None)
-
+            if worker_id in self.workerTask:
+                unfinishedTask.add(self.workerTask.pop(worker_id))
         self.lock.release()
-        return died_workers
+
+        return died_workers, unfinishedTask
 

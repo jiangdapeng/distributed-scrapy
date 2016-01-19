@@ -111,6 +111,8 @@ class Task(object):
     def get_identifier(self):
         return self.identifier
 
+    def __str__(self):
+        return "Task{id=%s,project=%s}" % (self.identifier, self.project)
 
     @classmethod
     def from_dict(cls, taskInfo):
