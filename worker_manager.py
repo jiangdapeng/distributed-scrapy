@@ -63,6 +63,9 @@ class WorkerManager(object):
     def get_workers(self):
         return self.workers.copy()
 
+    def get_idle_workers(self):
+        return self.workersInQueue.copy()
+
     def _is_die(self, worker):
         timestamp = common.get_timestamp()
         return timestamp - worker.get_heartbeat() > self.conf.DIE_THRESHOLD

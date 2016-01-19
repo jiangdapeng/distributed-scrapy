@@ -9,6 +9,8 @@ import traceback
 
 import common
 from common import NodeInfo, RequestHandler, NodeStatus
+import utils
+from log import logging
 import conf_master
 import conf_client
 
@@ -78,7 +80,24 @@ class WorkerNode(object):
         self.proxy.task_complete(self.node_info, task, {})
 
     def run(self):
-        self.register()
+
+        prc = RPCWorkerThread(self)
+        prc.setDaemon(True)
+
+        heartbeat_thread = HeartbeatThread(self)
+        heartbeat_thread.setDaemon(True)
+
+        prc.start()
+
+        try:
+            self.register()
+        except Exception,e:
+            # traceback.print_exc()
+            logging.warning('''Server is not available!\nPlease check: \n1. Server is running.\n 2. Network is ok''')
+            exit(1)
+
+        heartbeat_thread.start()
+
         while True:
             try:
                 self.do_task()
@@ -122,18 +141,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-p","--port", help=u"作业节点rpc服务端口", type=int)
     args = parser.parse_args()
-    ip = conf_client.WORKER_IP
+    ip = utils.IPGetter.get_ip_address()
     port = conf_client.WORKER_PORT
     if args.port is not None:
         port = args.port
 
     worker_node = get_worker(ip, port)
-
-    prc = RPCWorkerThread(worker_node)
-    heartbeat_thread = HeartbeatThread(worker_node)
-
-    prc.start()
-    heartbeat_thread.start()
 
     worker_node.run()
 

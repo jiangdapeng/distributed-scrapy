@@ -5,7 +5,7 @@ from SimpleXMLRPCServer import SimpleXMLRPCServer
 
 import conf_master
 import master
-from master import Task, TaskLoader
+from common import Task, TaskLoader
 from common import NodeInfo, RequestHandler, doesServiceExist
 
 class ThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer): pass
@@ -27,9 +27,7 @@ class RPCServerThread(threading.Thread):
         self.master = master
 
     def register_worker(self, worker):
-        print(worker)
         nodeInfo = NodeInfo.from_dict(worker)
-        print(nodeInfo)
         return self.master.register_worker(nodeInfo)
 
     def logout_worker(self, worker):

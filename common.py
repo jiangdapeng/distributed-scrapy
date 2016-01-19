@@ -1,4 +1,5 @@
 #coding=utf8
+import socket
 import xmlrpclib, httplib
 
 from SimpleXMLRPCServer import SimpleXMLRPCRequestHandler
@@ -78,7 +79,6 @@ class RPCServerProxy(object):
     def build_uri(self, node_info):
         return 'http://%s:%s' % (node_info.ip, node_info.port)
 
-import socket
 
 def doesServiceExist(host, port):
     '''
@@ -95,3 +95,40 @@ def doesServiceExist(host, port):
         return True
     except:
         return False
+
+
+class Task(object):
+    """定义一个作业"""
+    required_fields = ['identifier', 'project', 'spider_name', 'urls', 'frequency']
+
+    def __init__(self, identifier, project, spider_name, urls, frequency= 24 * 60):
+        self.identifier = identifier
+        self.project = project
+        self.spider_name = spider_name
+        self.urls = urls
+        self.frequency = frequency
+
+    def get_identifier(self):
+        return self.identifier
+
+
+    @classmethod
+    def from_dict(cls, taskInfo):
+        valid = True
+        for field in cls.required_fields:
+            if field not in taskInfo:
+                valid = False
+                break
+        if not valid:
+            return None
+
+        return cls(**taskInfo)
+
+class TaskLoader(object):
+
+    def __init__(self):
+        pass
+
+    def get_tasks(self):
+        tasks = [Task(i, 'test','test_spider',['http://'+str(i)]) for i in range(1000)]
+        return tasks

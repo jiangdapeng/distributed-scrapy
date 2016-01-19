@@ -8,26 +8,6 @@ import common
 import conf_master
 from worker_manager import WorkerManager
 
-class Task(object):
-
-    def __init__(self, identifier, project, spider_name, urls):
-        self.identifier = identifier
-        self.project = project
-        self.spider_name = spider_name
-        self.urls = urls
-
-    def get_identifier(self):
-        return self.identifier
-
-class TaskLoader(object):
-
-    def __init__(self):
-        pass
-
-    def get_tasks(self):
-        tasks = [Task(i, 'test','test_spider',['http://'+str(i)]) for i in range(1000)]
-        return tasks
-
 
 class CheckWorkersThread(threading.Thread):
     '''用于定期检查作业节点状态，并清除死亡节点的线程'''
@@ -60,7 +40,7 @@ class Master(object):
         return {
             'total_workers': self.workerManager.get_workers(),
             'tasks': self.tasks_queue.qsize(),
-            'idle_workers': {}
+            'idle_workers': self.workerManager.get_idle_workers()
         }
 
 
