@@ -24,7 +24,7 @@ class WorkerManager(object):
         '''返回一个空闲的worker，如果没有会阻塞程序执行'''
         while True:
             worker = self.idleWorkersQueue.get()
-            if worker.get_identifier() in self.workers:
+            if worker.get_uuid() in self.workers:
                 worker.status = NodeStatus.working
                 self.update_worker(worker)
                 break
@@ -46,7 +46,7 @@ class WorkerManager(object):
     def update_worker(self, worker):
         '''更新worker信息'''
         self.lock.acquire()
-        id = worker.get_identifier()
+        id = worker.get_uuid()
         status = worker.status
         self.workers[id] = worker
         if status == NodeStatus.idle and id not in self.workersInQueue:
@@ -63,18 +63,18 @@ class WorkerManager(object):
 
     def assign_task(self, worker, task):
         """task分配给worker"""
-        logging.info("%s -> %s",task.get_identifier(), str(worker))
+        logging.info("%s -> %s",task.get_uuid(), str(worker))
         ok = False
         self.lock.acquire()
-        if worker.get_identifier() not in self.workerTask:
-            self.workerTask[worker.get_identifier()] = task
+        if worker.get_uuid() not in self.workerTask:
+            self.workerTask[worker.get_uuid()] = task
             ok = True
         self.lock.release()
         return ok
 
     def finish_task(self, worker, task):
         self.lock.acquire()
-        self.workerTask.pop(worker.get_identifier(), None)
+        self.workerTask.pop(worker.get_uuid(), None)
         self.lock.release()
 
     def get_workers(self):

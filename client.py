@@ -7,11 +7,11 @@ import time
 import traceback
 
 import common
-from common import NodeInfo, RequestHandler, NodeStatus
+from common import NodeInfo, RequestHandler, NodeStatus, Task
 import utils
 from log import logging
-import conf_master
-import conf_client
+import conf
+import conf
 
 class HeartbeatThread(threading.Thread):
     '''用于与master保持心跳的专用线程'''
@@ -23,7 +23,7 @@ class HeartbeatThread(threading.Thread):
         if heartbeat_duration is not None:
             self.heartbeat_duration = heartbeat_duration
         else:
-            self.heartbeat_duration = conf_master.HEARTBEAT_DURATION
+            self.heartbeat_duration = conf.HEARTBEAT_DURATION
 
     def run(self):
         while True:
@@ -67,7 +67,7 @@ class WorkerNode(object):
 
     def assign_task(self, task):
         '''增加作业'''
-        self.tasks.put(task)
+        self.tasks.put(Task.from_dict(task))
 
     def is_idle(self):
         return self.tasks.qsize()==0 and not self.working
@@ -89,11 +89,16 @@ class WorkerNode(object):
         '''执行作业'''
         task = self.tasks.get()
         self.working = True
-        # do task here
-        logging.info(task)
-        time.sleep(3)
+        # execute task here
+        result = self._execute_task(task)
         # 告诉master作业完成
-        self.finish_task(task, {})
+        self.finish_task(task, result)
+
+    def _execute_task(self, task):
+        logging.info(task)
+        cmd = task.get_cmd()
+        logging.info(cmd)
+        return {}
 
     def run(self):
 
@@ -123,7 +128,8 @@ class RPCWorkerThread(threading.Thread):
         self.worker_node = worker_node
 
         # Create server
-        server = SimpleXMLRPCServer((worker_node.node_info.ip, worker_node.node_info.port), requestHandler=RequestHandler, logRequests=True)
+        server = SimpleXMLRPCServer((worker_node.node_info.ip, worker_node.node_info.port),
+                                    requestHandler=RequestHandler, logRequests=True)
         server.register_introspection_functions()
         server.register_function(self.assign_task)
         self.server = server
@@ -136,8 +142,10 @@ class RPCWorkerThread(threading.Thread):
     def run(self):
         self.server.serve_forever()
 
-def get_worker(ip, port):
-    master_info = NodeInfo(name="master",ip=conf_master.MASTER_IP,port=conf_master.MASTER_PORT, status=NodeStatus.working)
+def get_worker(port):
+    ip = utils.IPGetter.get_ip_address()
+    master_info = NodeInfo(name="master",ip=conf.MASTER_IP,
+                           port=conf.MASTER_PORT, status=NodeStatus.working)
     node_info = NodeInfo(name="worker", ip=ip, port=port, status=NodeStatus.idle)
 
     if common.doesServiceExist(node_info.ip, node_info.port):
@@ -153,12 +161,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-p","--port", help=u"作业节点rpc服务端口", type=int)
     args = parser.parse_args()
-    ip = utils.IPGetter.get_ip_address()
-    port = conf_client.WORKER_PORT
+    port = conf.WORKER_PORT
     if args.port is not None:
         port = args.port
 
-    worker_node = get_worker(ip, port)
+    worker_node = get_worker(port)
 
     worker_node.run()
 

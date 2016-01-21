@@ -5,7 +5,7 @@ import traceback
 import time
 
 import common
-import conf_master
+import conf
 from worker_manager import WorkerManager
 from task_manager import TaskManager
 from log import logging
@@ -21,7 +21,7 @@ class CheckWorkersThread(threading.Thread):
     def run(self):
         while True:
             try:
-                time.sleep(conf_master.DIE_THRESHOLD)
+                time.sleep(conf.DIE_THRESHOLD)
                 self.master.clean_death_workers()
             except Exception,e:
                 traceback.print_exc()
@@ -69,7 +69,7 @@ class Master(object):
         if worker is None:
             status = "Invalid"
             return status
-        identifier = worker.get_identifier()
+        identifier = worker.get_uuid()
         w, tasks = self.workerManager.remove_worker(identifier)
         for task in tasks:
             self.taskManager.fail_task(task)
