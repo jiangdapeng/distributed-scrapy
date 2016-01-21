@@ -3,6 +3,7 @@ import socket
 import random
 import xmlrpclib, httplib
 from os import path
+import uuid
 
 from conf import PROJECTS_ROOT_PATH
 
@@ -163,9 +164,15 @@ class TaskLoader(object):
     def __init__(self):
         pass
 
+
     def get_tasks(self):
-        tasks = [Task(i, 'project1','spider1',urls=["http://www.baidu.com/s?wd=%s" % i,], params={}, priority=random.randrange(1,5)) for i in range(1000)]
+        tasks = [Task(self.gen_task_uuid(i), 'project1','spider1',urls=["http://www.baidu.com/s?wd=%s" % i,], params={}, priority=random.randrange(1,5)) for i in range(1000)]
         return tasks
+
+    @classmethod
+    def gen_task_uuid(cls, givenId):
+        """生成作业唯一标识符"""
+        return '%s-%s' % (str(uuid.uuid1()),str(givenId))
 
 class TaskStatus(object):
     """作业状态"""
