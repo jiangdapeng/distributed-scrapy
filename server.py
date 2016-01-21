@@ -5,7 +5,7 @@ from SimpleXMLRPCServer import SimpleXMLRPCServer
 
 import conf
 import master
-from common import Task, TaskLoader
+from common import Task, TaskLoader, TaskResult
 from common import NodeInfo, RequestHandler, doesServiceExist
 
 class ThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer): pass
@@ -34,10 +34,10 @@ class RPCServerThread(threading.Thread):
         nodeInfo = NodeInfo.from_dict(worker)
         return self.master.remove_worker(nodeInfo)
 
-    def task_complete(self, worker, task, stats):
+    def task_complete(self, worker, taskResult):
         nodeInfo = NodeInfo.from_dict(worker)
-        taskObj = Task.from_dict(task)
-        return self.master.task_complete(nodeInfo, taskObj, stats)
+        result = TaskResult.from_dict(taskResult)
+        return self.master.task_complete(nodeInfo, result)
 
     def get_master_status(self):
         return self.master.get_status()

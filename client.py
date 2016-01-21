@@ -5,12 +5,12 @@ import argparse
 from SimpleXMLRPCServer import SimpleXMLRPCServer
 import time
 import traceback
+import subprocess
 
 import common
-from common import NodeInfo, RequestHandler, NodeStatus, Task
+from common import NodeInfo, RequestHandler, NodeStatus, Task, TaskResult
 import utils
 from log import logging
-import conf
 import conf
 
 class HeartbeatThread(threading.Thread):
@@ -81,7 +81,7 @@ class WorkerNode(object):
 
         self.node_info.update_heartbeat()
         try:
-            self.proxy.task_complete(self.node_info, task, result)
+            self.proxy.task_complete(self.node_info, result)
         except Exception,e:
             logging.warning(e)
 
@@ -98,7 +98,15 @@ class WorkerNode(object):
         logging.info(task)
         cmd = task.get_cmd()
         logging.info(cmd)
-        return {}
+        p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out,err = p.communicate()
+        if p.returncode == 0:
+            logging.info("success")
+            logging.info(out)
+        else:
+            logging.info("failed")
+        result = TaskResult(task.get_uuid(), p.returncode)
+        return result
 
     def run(self):
 

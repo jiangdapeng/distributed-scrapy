@@ -5,10 +5,12 @@ import traceback
 import time
 
 import common
+from common import TaskStatus
 import conf
 from worker_manager import WorkerManager
 from task_manager import TaskManager
 from log import logging
+
 
 
 class CheckWorkersThread(threading.Thread):
@@ -40,7 +42,7 @@ class Master(object):
     def get_status(self):
         return {
             'total_workers': self.workerManager.get_workers(),
-            'tasks': self.taskManager.get_task_count(),
+            'tasks': self.taskManager.get_tasks_stats(),
             'idle_workers': self.workerManager.get_idle_workers()
         }
 
@@ -50,7 +52,7 @@ class Master(object):
         workers,tasks = self.workerManager.clean_death_workers()
         logging.info("death workers:%s; relatedTasks:%s", workers, tasks)
         for task in tasks:
-            self.taskManager.fail_task(task)
+            self.taskManager.fail_task(task.uuid, TaskStatus.notReturned)
         return workers
 
     def register_worker(self, worker):
@@ -72,16 +74,19 @@ class Master(object):
         identifier = worker.get_uuid()
         w, tasks = self.workerManager.remove_worker(identifier)
         for task in tasks:
-            self.taskManager.fail_task(task)
+            self.taskManager.fail_task(task.get_uuid(), TaskStatus.notReturned)
         if w is None:
             status = "NOT EXISTS"
         return status
 
-    def task_complete(self, worker, task, stats):
+    def task_complete(self, worker, taskResult):
         '''worker完成一个作业，返回作业统计信息，worker重新归于队列'''
-        self.workerManager.finish_task(worker, task)
+        self.workerManager.finish_task(worker, taskResult)
         self.workerManager.update_worker(worker)
-        self.taskManager.finish_task(task)
+        if taskResult.is_success():
+            self.taskManager.finish_task(taskResult.get_task_uuid())
+        else:
+            self.taskManager.fail_task(taskResult.get_task_uuid(), TaskStatus.failedToExecute)
         return True
 
     def heartbeat(self, worker):
@@ -96,7 +101,7 @@ class Master(object):
         self.taskManager.load_tasks()
 
     def schedule_next(self):
-        logging.info('qsize: %s',self.taskManager.get_task_count())
+        logging.info('tasks: %s',self.taskManager.get_tasks_stats())
         task = self.taskManager.next_task()
         worker = self.workerManager.next_worker()
         self.workerManager.assign_task(worker, task)

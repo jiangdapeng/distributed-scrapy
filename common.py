@@ -22,13 +22,33 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
 class NodeStatus(object):
     idle = 1    # 空闲
     working = 2 # 工作中
-    down = 3    # 无响应
+    down = 4    # 无响应
 
-class NodeInfo(object):
+class ClassFromDict(object):
+
+    required_fields = []
+
+    def __init__(self, **kwargs):
+        pass
+
+    @classmethod
+    def from_dict(cls, attrs):
+        ok = True
+        for field in cls.required_fields:
+            if field not in attrs:
+                ok = False
+                break
+        if not ok:
+            return None
+        return cls(**attrs)
+
+
+class NodeInfo(ClassFromDict):
 
     required_fields = ['name', 'ip', 'port', 'status']
 
     def __init__(self, name, ip, port, status, **kw):
+        super(NodeInfo, self).__init__()
         self.name = name
         self.ip = ip
         self.port = port
@@ -53,17 +73,6 @@ class NodeInfo(object):
     def __str__(self):
         return self.get_uuid()
 
-    @classmethod
-    def from_dict(cls, infoDict):
-        ok = True
-        for f in cls.required_fields:
-            if f not in infoDict:
-                ok = False
-                break
-        if not ok:
-            return None
-        node = cls(**infoDict )
-        return node
 
 class TimeoutTransport(xmlrpclib.Transport):
     timeout = 10.0
@@ -101,44 +110,53 @@ def doesServiceExist(host, port):
         return False
 
 
-class Task(object):
+class Task(ClassFromDict):
     """定义一个作业"""
-    required_fields = ['uuid', 'project', 'spider_name', 'urls', 'params', 'period', 'priority']
+    required_fields = ['uuid', 'project', 'spiderName', 'urls', 'params']
 
-    def __init__(self, uuid, project, spider_name, urls, period= 24 * 60, params={}, priority=1):
+
+    def __init__(self, uuid, project, spiderName, urls, period= 24 * 60, params={}, priority=1, retry=0):
+        """
+        :param uuid: Task 唯一标识符
+        :param project:
+        :param spiderName:
+        :param urls: 爬虫作业起始URL
+        :param period: 执行周期，单位（分钟）
+        :param params: 爬虫作业其他参数
+        :param priority: 优先级
+        :param retry: 重试次数
+        :return:
+        """
+        super(Task, self).__init__()
         self.uuid = uuid
         self.project = project
-        self.spider_name = spider_name
+        self.spiderName = spiderName
         self.urls = urls
         self.params = params
         self.period = period
         self.priority = priority
+        self.retry = retry
 
     def get_uuid(self):
         return self.uuid
 
+    def try_again(self):
+        """是否重试"""
+        if self.retry > 0:
+            self.retry -= 1
+            return True
+        return False
 
     def get_cmd(self):
         urls = '-a urls="%s"' % ';'.join(self.urls)
         params = urls + ' ' +' '.join(['-a %s="%s"' % (k,v) for (k,v) in self.params.items()])
-        crawlCmd = 'scrapy crawl {spider_name} {params}'.format(spider_name=self.spider_name, params=params)
+        crawlCmd = 'scrapy crawl {spider_name} {params}'.format(spider_name=self.spiderName, params=params)
         totalCmd = 'cd {path} && {crawlCmd}'.format(path=path.join(PROJECTS_ROOT_PATH,self.project), crawlCmd=crawlCmd)
         return totalCmd
 
     def __str__(self):
         return "Task{id=%s,project=%s}" % (self.uuid, self.project)
 
-    @classmethod
-    def from_dict(cls, taskInfo):
-        valid = True
-        for field in cls.required_fields:
-            if field not in taskInfo:
-                valid = False
-                break
-        if not valid:
-            return None
-
-        return cls(**taskInfo)
 
 class TaskLoader(object):
 
@@ -146,5 +164,32 @@ class TaskLoader(object):
         pass
 
     def get_tasks(self):
-        tasks = [Task(i, 'test','test_spider',urls=["http://tieba.baidu.com/%s" % i,], params={}, priority=random.randrange(1,5)) for i in range(1000)]
+        tasks = [Task(i, 'project1','spider1',urls=["http://www.baidu.com/s?wd=%s" % i,], params={}, priority=random.randrange(1,5)) for i in range(1000)]
         return tasks
+
+class TaskStatus(object):
+    """作业状态"""
+
+    sucessed = 0        # 成功执行
+    ready = 1           # 可以给worker执行了
+    assigned = 2        # 已经成功给worker了
+    failedToAssign = 4  # 提交给worker失败
+    failedToExecute = 8 # worker执行失败
+    notReturned = 16    # worker未反馈结果
+
+class TaskResult(ClassFromDict):
+
+    required_fields = ['taskUuid', 'returnCode']
+
+    def __init__(self, taskUuid, returnCode, extra=''):
+        super(TaskResult, self).__init__()
+
+        self.taskUuid = taskUuid
+        self.returnCode = returnCode
+        self.extra = extra
+
+    def is_success(self):
+        return self.returnCode == 0
+
+    def get_task_uuid(self):
+        return self.taskUuid
